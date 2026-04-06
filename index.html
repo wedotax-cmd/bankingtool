@@ -137,7 +137,7 @@ input:focus, select:focus { border-color: var(--navy); box-shadow: 0 0 0 3px rgb
 .upload-icon { font-size: 2.4rem; margin-bottom: 10px; }
 .upload-zone h3 { color: var(--navy); font-size: 0.95rem; margin-bottom: 5px; }
 .upload-zone p { color: var(--text-muted); font-size: 0.8rem; }
-.upload-zone input[type="file"] { display: none; }
+.upload-zone input[type="file"] { display: none !important; }
 
 .file-list { margin-top: 14px; display: flex; flex-direction: column; gap: 7px; }
 .file-item {
@@ -478,9 +478,9 @@ tfoot tr td { border-top: 2px solid var(--border); }
         <p style="margin-top:5px;">Capitec · Nedbank · ABSA · FNB · Discovery · Standard Bank</p>
         <p style="margin-top:6px;color:var(--steel);font-size:0.73rem;">Scanned copies accepted &nbsp;·&nbsp; Multiple statements welcome &nbsp;·&nbsp; All accounts consolidated</p>
         <div style="margin-top:18px;">
-          <label for="fileInput" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#2D3561,#3d4880);color:#fff;border-radius:8px;font-weight:700;font-size:0.88rem;cursor:pointer;letter-spacing:0.03em;">📄 Browse for PDF Files</label>
+          <input type="file" id="fileInput" accept=".pdf" multiple onchange="handleFiles(this.files)"
+            style="display:block;margin:0 auto;padding:10px 24px;background:linear-gradient(135deg,#2D3561,#3d4880);color:#fff;border-radius:8px;font-weight:700;font-size:0.88rem;cursor:pointer;border:none;letter-spacing:0.03em;width:auto;">
         </div>
-        <input type="file" id="fileInput" accept=".pdf" multiple onchange="handleFiles(this.files)" style="position:absolute;left:-9999px;opacity:0;">
       </div>
       <div class="file-list" id="fileList"></div>
     </div>
@@ -664,15 +664,21 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function buildPUGrid() {
-  const grid = document.getElementById('puGrid');
-  grid.innerHTML = CATEGORIES
-    .filter(c => c.puDefault > 0)
-    .map(c => `
-      <div class="pu-item">
-        <label>${c.label}</label>
-        <input type="number" class="pu-input" data-cat="${c.id}" value="${c.puDefault}" min="0" max="100" step="5">
-        <span class="pu-pct">%</span>
-      </div>`).join('');
+  try {
+    var grid = document.getElementById('puGrid');
+    if (!grid) return;
+    var cats = CATEGORIES.filter(function(c) { return c.puDefault > 0; });
+    var html = '';
+    for (var i = 0; i < cats.length; i++) {
+      var c = cats[i];
+      html += '<div class="pu-item">';
+      html += '<label style="font-size:0.76rem;flex:1;margin:0;font-weight:500;">' + c.label + '</label>';
+      html += '<input type="number" class="pu-input" data-cat="' + c.id + '" value="' + c.puDefault + '" min="0" max="100" step="5" style="width:65px;text-align:center;padding:5px;">';
+      html += '<span style="font-size:0.78rem;color:#6b7280;margin-left:4px;">%</span>';
+      html += '</div>';
+    }
+    grid.innerHTML = html;
+  } catch(e) { console.error('buildPUGrid:', e); }
 }
 
 function getPU() {
