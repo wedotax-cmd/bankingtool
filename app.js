@@ -36,6 +36,13 @@ function initApp() {
   var d = document.getElementById('f9');
   if (d) d.value = new Date().toISOString().split('T')[0];
   buildPU();
+  // Load API key from session
+  var k = sessionStorage.getItem('wdt_k');
+  if (!k) {
+    k = prompt('WDT Expense Analyser\n\nEnter your Anthropic API key (sk-ant-...) to continue:');
+    if (k) sessionStorage.setItem('wdt_k', k);
+  }
+  window._wdtKey = k || '';
   // Event delegation for dynamically built elements
   document.addEventListener('click', function(e) {
     var t = e.target;
@@ -257,10 +264,16 @@ function analyse() {
       updOv('Analysing part ' + (chunkIdx+1) + ' of ' + chunks.length + '...', 'Claude AI is categorising transactions. Please wait.');
       var chunkPrompt = 'You are a South African tax expert at We Do Tax Services (Pty) Ltd.\nClient: ' + cn + '\nTax Year: ' + yr + '\nIncome Source Code: ' + sc + '\n' + (ctx ? 'Notes: ' + ctx + '\n' : '') + '\nBank statement text (part ' + (chunkIdx+1) + ' of ' + chunks.length + '):\n\n' + chunks[chunkIdx] + '\n\nExtract ALL claimable business expense transactions from Section 11(a).\n\nCategories:\n' + catList + '\nRULES: Include expense debits only. Exclude salary credits and transfers.\n- Bank fees→bank, Fuel→vehicle, Vehicle finance→vehicle, Airtime/data→cellphone, Internet→internet, Subscriptions→subscriptions, Restaurants→entertainment, Cash Send/EFT to person→commission (needsReview=true), Ambiguous→uncategorised (needsReview=true)\n\nRespond ONLY with a raw JSON array. No markdown.\nEach item: {date,description,bank,amount,category,needsReview,suggestion}';
       
-      fetch('/api/analyse', {
+      var apiKey = window._wdtKey || '';
+      fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({messages:[{role:'user',content:[{type:'text',text:chunkPrompt}]}]})
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:8000,messages:[{role:'user',content:[{type:'text',text:chunkPrompt}]}]})
       }).then(function(r) { return r.json(); }).then(function(data) {
         if (data.error) throw new Error(data.error.message);
         var raw = '';
