@@ -227,27 +227,56 @@ function analyse() {
     var prompt = 'You are a South African tax expert at We Do Tax Services (Pty) Ltd.\n\nClient: ' + cn + '\nTax Year: ' + yr + ' (1 March ' + ys + ' to 28 February ' + yr + ')\nIncome Source Code: ' + sc + '\n' + (ctx ? 'Consultant notes: ' + ctx : '') + '\n\nHere is the bank statement text extracted from PDF:\n\n' + combinedText + '\n\nAnalyse the above bank statement text. Extract EVERY transaction that could be a claimable business expense under Section 11(a) of the Income Tax Act 58 of 1962.\n\nCategories:\n' + catList + '\nRULES:\n- Include ALL potential business expense debits\n- EXCLUDE: salary credits, inter-account transfers, personal purchases\n- Bank fees → bank\n- Fuel stations (Engen,Shell,BP,Sasol,Caltex) → vehicle\n- Vehicle finance (WesBank,MFC) → vehicle\n- Airtime/data (Vodacom,MTN,Cell C,Telkom,Rain) → cellphone\n- Internet (Telkom,Afrihost,Vox,MWEB) → internet\n- Subscriptions (Netflix,Spotify,Microsoft,Adobe) → subscriptions\n- Restaurants/coffee → entertainment\n- Cash Send/EFT to person name → commission, needsReview=true\n- Ambiguous → uncategorised, needsReview=true\n\nRespond ONLY with raw JSON array. No markdown. No explanation.\n\nEach object: {date,description,bank,amount,category,needsReview,suggestion}. Keep description short. Omit confidence and rawDescription to save space.';
     content = [{type:'text', text: prompt}];
     
-    // Send extracted text to Netlify function
-    fetch('/api/analyse', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({messages:[{role:'user',content:content}]})
-    }).then(function(r) { return r.json(); }).then(function(data) {
-      handleResult(data);
-    }).catch(function(e) { hideOv(); alert('Error: ' + e.message); });
-    
-    function handleResult(data) {
-      if (data.error) throw new Error(data.error.message);
-      var raw = '';
-      for (var k = 0; k < data.content.length; k++) raw += (data.content[k].text || '');
-      var fence=String.fromCharCode(96,96,96);raw=raw.replace(new RegExp(fence+'json|'+fence,'gi'),'').trim();
-      var parsed = JSON.parse(raw);
-      txns = [];
-      for (var m = 0; m < parsed.length; m++) txns.push(Object.assign({id:m}, parsed[m]));
-      hideOv();
-      renderReview();
-      gp(3);
+    // Split text into chunks of 40000 chars and process each
+    var CHUNK_SIZE = 40000;
+    var chunks = [];
+    var fullText = combinedText;
+    while (fullText.length > 0) {
+      // Split on newline boundary
+      var end = Math.min(CHUNK_SIZE, fullText.length);
+      if (end < fullText.length) {
+        var nl = fullText.lastIndexOf('\n', end);
+        if (nl > 10000) end = nl;
+      }
+      chunks.push(fullText.substring(0, end));
+      fullText = fullText.substring(end);
     }
+    
+    var allTxns = [];
+    var chunkIdx = 0;
+    
+    function processChunk() {
+      if (chunkIdx >= chunks.length) {
+        txns = [];
+        for (var i = 0; i < allTxns.length; i++) txns.push(Object.assign({id:i}, allTxns[i]));
+        hideOv();
+        renderReview();
+        gp(3);
+        return;
+      }
+      updOv('Analysing part ' + (chunkIdx+1) + ' of ' + chunks.length + '...', 'Claude AI is categorising transactions. Please wait.');
+      var chunkPrompt = 'You are a South African tax expert at We Do Tax Services (Pty) Ltd.\nClient: ' + cn + '\nTax Year: ' + yr + '\nIncome Source Code: ' + sc + '\n' + (ctx ? 'Notes: ' + ctx + '\n' : '') + '\nBank statement text (part ' + (chunkIdx+1) + ' of ' + chunks.length + '):\n\n' + chunks[chunkIdx] + '\n\nExtract ALL claimable business expense transactions from Section 11(a).\n\nCategories:\n' + catList + '\nRULES: Include expense debits only. Exclude salary credits and transfers.\n- Bank fees→bank, Fuel→vehicle, Vehicle finance→vehicle, Airtime/data→cellphone, Internet→internet, Subscriptions→subscriptions, Restaurants→entertainment, Cash Send/EFT to person→commission (needsReview=true), Ambiguous→uncategorised (needsReview=true)\n\nRespond ONLY with a raw JSON array. No markdown.\nEach item: {date,description,bank,amount,category,needsReview,suggestion}';
+      
+      fetch('/api/analyse', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({messages:[{role:'user',content:[{type:'text',text:chunkPrompt}]}]})
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.error) throw new Error(data.error.message);
+        var raw = '';
+        for (var k = 0; k < data.content.length; k++) raw += (data.content[k].text || '');
+        var fence = String.fromCharCode(96,96,96);
+        raw = raw.replace(new RegExp(fence+'json|'+fence,'gi'),'').trim();
+        try {
+          var parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) for (var m = 0; m < parsed.length; m++) allTxns.push(parsed[m]);
+        } catch(e) { console.warn('Chunk ' + chunkIdx + ' parse error:', e, raw.substring(0,100)); }
+        chunkIdx++;
+        setTimeout(processChunk, 2000);
+      }).catch(function(e) { hideOv(); alert('Error on part ' + (chunkIdx+1) + ': ' + e.message); });
+    }
+    
+    processChunk();
 
   }).catch(function(e) { hideOv(); alert('Error extracting PDF text: ' + e.message); });
 }
