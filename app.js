@@ -221,8 +221,6 @@ function analyse() {
     if (combinedText.length <= CHUNK) {
       content.push({type:'text', text: combinedText});
     } else {
-      // Will be handled by processNext chunking
-      content.push({type:'text', text: combinedText.substring(0, CHUNK)});
     }
     // Store full text for chunked processing
     window._fullBankText = combinedText;
@@ -249,10 +247,8 @@ function analyse() {
       hideOv();
       renderReview();
       gp(3);
-      gp(3);
     }
 
-    processNext(0);
   }).catch(function(e) { hideOv(); alert('Error extracting PDF text: ' + e.message); });
 }
 
