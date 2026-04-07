@@ -176,9 +176,12 @@ function analyse() {
     
     function processNext(idx) {
       if (idx >= pdfContents.length) {
-        // All done - simulate full response
-        var fakeData = { content: [{ type: 'text', text: JSON.stringify(allTxns) }] };
-        handleResult(fakeData);
+        // All done - assign to txns and render
+        txns = [];
+        for (var i = 0; i < allTxns.length; i++) txns.push(Object.assign({id:i}, allTxns[i]));
+        hideOv();
+        renderReview();
+        gp(3);
         return;
       }
       updOv('Processing statement ' + (idx+1) + ' of ' + pdfContents.length + '...', 'Claude AI is reading and categorising transactions.');
@@ -196,11 +199,12 @@ function analyse() {
         try {
           var parsed = JSON.parse(raw);
           for (var m = 0; m < parsed.length; m++) allTxns.push(parsed[m]);
-        } catch(e) { console.error('Parse error for PDF ' + idx, e); }
+        } catch(e) { console.error('Parse error for PDF ' + idx, e, 'Raw:', raw.substring(0,200)); }
         processNext(idx + 1);
       }).catch(function(e) { hideOv(); alert('Error on statement ' + (idx+1) + ': ' + e.message); });
     }
     
+    // handleResult no longer used - kept for safety
     function handleResult(data) {
       if (data.error) throw new Error(data.error.message);
       var raw = '';
