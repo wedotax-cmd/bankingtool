@@ -200,7 +200,8 @@ function analyse() {
           var parsed = JSON.parse(raw);
           for (var m = 0; m < parsed.length; m++) allTxns.push(parsed[m]);
         } catch(e) { console.error('Parse error for PDF ' + idx, e, 'Raw:', raw.substring(0,200)); }
-        processNext(idx + 1);
+        // Wait 4 seconds between statements to respect rate limits
+        setTimeout(function() { processNext(idx + 1); }, 4000);
       }).catch(function(e) { hideOv(); alert('Error on statement ' + (idx+1) + ': ' + e.message); });
     }
     
