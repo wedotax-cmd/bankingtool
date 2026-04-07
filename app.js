@@ -32,10 +32,32 @@ var txns = [];
 var pu = {};
 var cf = 'all';
 
-window.onload = function() {
-  document.getElementById('f9').value = new Date().toISOString().split('T')[0];
+function initApp() {
+  var d = document.getElementById('f9');
+  if (d) d.value = new Date().toISOString().split('T')[0];
   buildPU();
-};
+  // Event delegation for dynamically built elements
+  document.addEventListener('click', function(e) {
+    var t = e.target;
+    // Category summary cards
+    if (t.closest && t.closest('[id^="cat_"]')) {
+      var el = t.closest('[id^="cat_"]');
+      var id = el.id.replace('cat_','');
+      setF(id, null);
+      return;
+    }
+    // Filter tabs
+    if (t.id && t.id.indexOf('ftab_') === 0) {
+      var f = t.id.replace('ftab_','');
+      setF(f, t);
+    }
+  });
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
 
 function buildPU() {
   var g = document.getElementById('pug');
@@ -206,7 +228,7 @@ function buildSG() {
     var id = keys[j];
     var cat = getCat(id);
     var pct = tot > 0 ? (bc[id].t / tot * 100).toFixed(1) : 0;
-    h += '<div class="sc" onclick="setF('' + id + '',null)">';
+    h += '<div class="sc" id="cat_' + id + '">';
     h += '<div class="cn">' + (cat ? cat.label : id) + '</div>';
     h += '<div class="ca">R ' + fmt(bc[id].t) + '</div>';
     h += '<div class="cc">' + bc[id].n + ' transaction' + (bc[id].n !== 1 ? 's' : '') + '</div>';
@@ -223,12 +245,12 @@ function buildFT() {
     cats[txns[i].category] = (cats[txns[i].category] || 0) + 1;
     if (txns[i].needsReview) rv++;
   }
-  var h = '<button class="ftab on" onclick="setF('all',this)">All (' + txns.length + ')</button>';
-  if (rv > 0) h += '<button class="ftab rev" onclick="setF('review',this)">⚠ Review (' + rv + ')</button>';
+  var h = '<button class="ftab on" id="ftab_all">All (' + txns.length + ')</button>';
+  if (rv > 0) h += '<button class="ftab rev" id="ftab_review">⚠ Review (' + rv + ')</button>';
   var ks = Object.keys(cats).sort();
   for (var j = 0; j < ks.length; j++) {
     var cat = getCat(ks[j]);
-    h += '<button class="ftab" onclick="setF('' + ks[j] + '',this)">' + (cat ? cat.label : ks[j]) + ' (' + cats[ks[j]] + ')</button>';
+    h += '<button class="ftab" id="ftab_' + ks[j] + '">' + (cat ? cat.label : ks[j]) + ' (' + cats[ks[j]] + ')</button>';
   }
   document.getElementById('ft').innerHTML = h;
 }
