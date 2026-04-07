@@ -169,11 +169,39 @@ function analyse() {
       content.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:pdfs[j]}});
     }
     content.push({type:'text',text:'You are a South African tax expert at We Do Tax Services (Pty) Ltd.\n\nClient: ' + cn + '\nTax Year: ' + yr + ' (1 March ' + ys + ' to 28 February ' + yr + ')\nIncome Source Code: ' + sc + '\n' + (ctx ? 'Consultant notes: ' + ctx : '') + '\n\nAnalyse ALL bank statement(s). Extract EVERY transaction that could be a claimable business expense under Section 11(a) of the Income Tax Act 58 of 1962.\n\nCategories:\n' + catList + '\nRULES:\n- Include ALL potential business expense debits\n- EXCLUDE: salary credits, inter-account transfers, personal purchases\n- Bank fees → bank\n- Fuel stations (Engen,Shell,BP,Sasol,Caltex) → vehicle\n- Vehicle finance (WesBank,MFC) → vehicle\n- Airtime/data (Vodacom,MTN,Cell C,Telkom,Rain) → cellphone\n- Internet (Telkom,Afrihost,Vox,MWEB) → internet\n- Subscriptions (Netflix,Spotify,Microsoft,Adobe) → subscriptions\n- Restaurants/coffee → entertainment\n- Cash Send/EFT to person name → commission, needsReview=true\n- Ambiguous → uncategorised, needsReview=true\n\nRespond ONLY with raw JSON array. No markdown. No explanation.\n\nEach object: date (DD MMM YYYY), description (clean name), rawDescription (exact from statement), bank (bank name), amount (positive number), category (id from list), confidence (high/medium/low), needsReview (boolean), suggestion (string if needsReview else empty string)'});
-    fetch('/api/analyse', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({messages:[{role:'user',content:content}]})
-    }).then(function(r) { return r.json(); }).then(function(data) {
+    // Send one PDF at a time to avoid timeout, merge results
+    var allTxns = [];
+    var pdfContents = content.filter(function(c){ return c.type === 'document'; });
+    var textPrompt = content.filter(function(c){ return c.type === 'text'; })[0];
+    
+    function processNext(idx) {
+      if (idx >= pdfContents.length) {
+        // All done - simulate full response
+        var fakeData = { content: [{ type: 'text', text: JSON.stringify(allTxns) }] };
+        handleResult(fakeData);
+        return;
+      }
+      updOv('Processing statement ' + (idx+1) + ' of ' + pdfContents.length + '...', 'Claude AI is reading and categorising transactions.');
+      var singleContent = [pdfContents[idx], textPrompt];
+      fetch('/api/analyse', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({messages:[{role:'user',content:singleContent}]})
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.error) throw new Error(data.error.message);
+        var raw = '';
+        for (var k = 0; k < data.content.length; k++) raw += (data.content[k].text || '');
+        var fence = String.fromCharCode(96,96,96);
+        raw = raw.replace(new RegExp(fence+'json|'+fence,'gi'),'').trim();
+        try {
+          var parsed = JSON.parse(raw);
+          for (var m = 0; m < parsed.length; m++) allTxns.push(parsed[m]);
+        } catch(e) { console.error('Parse error for PDF ' + idx, e); }
+        processNext(idx + 1);
+      }).catch(function(e) { hideOv(); alert('Error on statement ' + (idx+1) + ': ' + e.message); });
+    }
+    
+    function handleResult(data) {
       if (data.error) throw new Error(data.error.message);
       var raw = '';
       for (var k = 0; k < data.content.length; k++) raw += (data.content[k].text || '');
@@ -184,7 +212,10 @@ function analyse() {
       hideOv();
       renderReview();
       gp(3);
-    }).catch(function(e) { hideOv(); alert('Error: ' + e.message); });
+      gp(3);
+    }
+
+    processNext(0);
   }).catch(function(e) { hideOv(); alert('Error reading files: ' + e.message); });
 }
 
